@@ -28,37 +28,65 @@ jobs:
           pip install weasyprint
           sudo apt-get update
           sudo apt-get install -y pandoc
+          # 确认安装成功
+          echo "Installed packages:"
+          pip list
+      
+      - name: Debug repository structure
+        run: |
+          echo "Current working directory: $(pwd)"
+          echo "Repository content:"
+          ls -la
+          echo "Scripts directory:"
+          ls -la .github/scripts/ || echo ".github/scripts/ not found"
+          echo "Styles directory:"
+          ls -la styles/ || echo "styles/ not found"
+          echo "Target manual directory:"
+          ls -la "${{ github.event.inputs.manual_path }}" || echo "Directory ${{ github.event.inputs.manual_path }} not found"
       
       - name: Create output directory
         run: mkdir -p pdf-output
       
-      # 添加调试步骤
-      - name: Debug information
+      - name: Verify Python script existence
         run: |
-          echo "Current directory structure:"
-          find . -type f -name "*.md" | sort
-          echo "Python version:"
-          python --version
-          echo "Pandoc version:"
-          pandoc --version
-          echo "WeasyPrint version:"
-          python -c "import weasyprint; print(weasyprint.__version__)"
-          echo "Content of specified directory:"
-          ls -la "${{ github.event.inputs.manual_path }}" || echo "Directory not found"
-          echo "README.md content (if exists):"
-          cat "${{ github.event.inputs.manual_path }}/README.md" || echo "README.md not found"
+          if [ -f ".github/scripts/generate_pdf.py" ]; then
+            echo "Python script exists"
+            head -n 20 .github/scripts/generate_pdf.py
+          else
+            echo "ERROR: Python script not found at .github/scripts/generate_pdf.py"
+            exit 1
+          fi
       
-      - name: Generate PDF
+      - name: Verify CSS file existence
         run: |
-          # 只处理指定手册
-          python .github/scripts/generate_pdf.py --dir "${{ github.event.inputs.manual_path }}" --output pdf-output --css styles/default.css --author "Z-Series"
+          if [ -f "styles/default.css" ]; then
+            echo "CSS file exists"
+            head -n 10 styles/default.css
+          else
+            echo "ERROR: CSS file not found at styles/default.css"
+            exit 1
+          fi
+      
+      - name: Test Python script
+        run: |
+          # 运行Python脚本的帮助信息
+          python .github/scripts/generate_pdf.py --help || echo "Script returned error when running --help"
+      
+      - name: Generate PDF with verbose output
+        run: |
+          set -x  # 打开调试输出
+          # 运行Python脚本并捕获退出代码
+          python .github/scripts/generate_pdf.py --dir "${{ github.event.inputs.manual_path }}" --output pdf-output --css styles/default.css --author "Z-Series" --verbose || { echo "PDF generation failed with exit code $?"; ls -la pdf-output; exit 1; }
           
-          # 显示生成的PDF文件
-          ls -la pdf-output/ || echo "No PDF generated"
-      
-      - name: Upload PDF as artifact
+          # 如果成功，显示生成的PDF文件
+          echo "Generated PDF files:"
+          ls -la pdf-output/
+          
+      - name: Upload PDF as artifact (if exists)
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: pdf-manual-${{ github.event.inputs.manual_path }}
           path: pdf-output/*.pdf
           retention-days: 30
+          if-no-files-found: warn
