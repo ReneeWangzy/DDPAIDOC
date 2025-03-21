@@ -13,7 +13,7 @@ jobs:
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           fetch-depth: 0
       
@@ -39,7 +39,7 @@ jobs:
           python .github/scripts/generate_pdf.py --dir "${{ github.event.inputs.manual_path }}" --output pdf-output --css styles/default.css --author "Z-Series"
       
       - name: Upload PDF as artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v2
         with:
           name: pdf-manual-${{ github.event.inputs.manual_path }}
           path: pdf-output/*.pdf
