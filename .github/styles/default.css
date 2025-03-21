@@ -1,0 +1,85 @@
+body {
+    font-family: "Noto Sans CJK SC", "SimSun", "Microsoft YaHei", sans-serif;
+    font-size: 11pt;
+    line-height: 1.5;
+    margin: 0 auto;
+    padding: 20px;
+    color: #333;
+}
+
+h1 {
+    font-size: 18pt;
+    color: #1a73e8;
+    border-bottom: 2px solid #1a73e8;
+    padding-bottom: 5px;
+}
+
+h2 {
+    font-size: 15pt;
+    color: #202124;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 3px;
+}
+
+h3 {
+    font-size: 13pt;
+    color: #5f6368;
+}
+
+table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 20px 0;
+    font-size: 10pt;
+}
+
+table, th, td {
+    border: 1px solid #ddd;
+}
+
+th, td {
+    padding: 8px;
+    text-align: left;
+}
+
+th {
+    background-color: #f8f9fa;
+}
+
+img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 10px auto;
+}
+
+code {
+    font-family: Consolas, monospace;
+    background-color: #f8f9fa;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-size: 0.9em;
+}
+
+pre {
+    background-color: #f8f9fa;
+    padding: 15px;
+    border-radius: 5px;
+    overflow-x: auto;
+}
+
+a {
+    color: #1a73e8;
+    text-decoration: none;
+}
+
+#TOC {
+    background-color: #f8f9fa;
+    padding: 15px;
+    border-radius: 5px;
+    margin-bottom: 30px;
+}
+
+#TOC ul {
+    padding-left: 20px;
+}
