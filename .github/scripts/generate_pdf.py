@@ -224,7 +224,7 @@ def main():
     parser.add_argument('--author', '-a', help='文档作者', default='')
     parser.add_argument('--version', '-v', help='文档版本', default='1.0')
     parser.add_argument('--name', '-n', help='输出PDF文件名')
-    
+    parser.add_argument('--verbose', action='store_true', help='显示详细的调试信息')
     args = parser.parse_args()
     
     # 检查CSS文件是否存在
