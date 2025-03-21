@@ -1,6 +1,5 @@
 name: Generate PDF Manuals
 on:
-  # 只保留手动触发，且必须指定手册路径
   workflow_dispatch:
     inputs:
       manual_path:
@@ -33,10 +32,29 @@ jobs:
       - name: Create output directory
         run: mkdir -p pdf-output
       
+      # 添加调试步骤
+      - name: Debug information
+        run: |
+          echo "Current directory structure:"
+          find . -type f -name "*.md" | sort
+          echo "Python version:"
+          python --version
+          echo "Pandoc version:"
+          pandoc --version
+          echo "WeasyPrint version:"
+          python -c "import weasyprint; print(weasyprint.__version__)"
+          echo "Content of specified directory:"
+          ls -la "${{ github.event.inputs.manual_path }}" || echo "Directory not found"
+          echo "README.md content (if exists):"
+          cat "${{ github.event.inputs.manual_path }}/README.md" || echo "README.md not found"
+      
       - name: Generate PDF
         run: |
           # 只处理指定手册
           python .github/scripts/generate_pdf.py --dir "${{ github.event.inputs.manual_path }}" --output pdf-output --css styles/default.css --author "Z-Series"
+          
+          # 显示生成的PDF文件
+          ls -la pdf-output/ || echo "No PDF generated"
       
       - name: Upload PDF as artifact
         uses: actions/upload-artifact@v4
