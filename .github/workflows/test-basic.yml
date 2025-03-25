@@ -1,1 +1,37 @@
-
+name: Basic PDF Test
+on:
+  workflow_dispatch:
+  
+jobs:
+  test-basic:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Create test files
+        run: |
+          mkdir -p test-dir
+          echo "# Test Document" > test-dir/test.md
+          echo "This is a test." >> test-dir/test.md
+          
+          mkdir -p styles
+          echo "body { font-family: Arial; }" > styles/simple.css
+      
+      - name: Install pandoc and weasyprint
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pandoc
+          pip install weasyprint
+      
+      - name: Generate simple PDF
+        run: |
+          pandoc test-dir/test.md -o test.pdf --pdf-engine=weasyprint --css=styles/simple.css
+          ls -la test.pdf
+      
+      - name: Upload test PDF
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-pdf
+          path: test.pdf
