@@ -11,27 +11,41 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
+      # 1. 检出代码
       - name: Checkout repository
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
       
+      # 2. 设置Python环境（保留原有）
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
       
+      # 3. 安装系统依赖（新增中文字体）
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install pandoc-latex-environment
-          pip install weasyprint
+          # 安装系统依赖
           sudo apt-get update
-          sudo apt-get install -y pandoc
-          # 确认安装成功
-          echo "Installed packages:"
-          pip list
+          sudo apt-get install -y \
+            fonts-noto-cjk \          # 新增：中文字体
+            pandoc \
+            texlive-xelatex \         # 新增：支持中文的LaTeX引擎
+            texlive-fonts-recommended
+          
+          # Python依赖（保留原有）
+          python -m pip install --upgrade pip
+          pip install \
+            pandoc-latex-environment \
+            weasyprint \
+            pygments
+          
+          # 验证字体安装
+          echo "已安装的中文字体："
+          fc-list :lang=zh | grep "Noto Sans CJK" || echo "警告：中文字体未安装成功"
       
+      # 4. 调试步骤（完全保留原有）
       - name: Debug repository structure
         run: |
           echo "Current working directory: $(pwd)"
@@ -44,9 +58,11 @@ jobs:
           echo "Target manual directory:"
           ls -la "${{ github.event.inputs.manual_path }}" || echo "Directory ${{ github.event.inputs.manual_path }} not found"
       
+      # 5. 创建输出目录（保留原有）
       - name: Create output directory
         run: mkdir -p pdf-output
       
+      # 6. 验证文件存在（保留原有）
       - name: Verify Python script existence
         run: |
           if [ -f ".github/scripts/generate_pdf.py" ]; then
@@ -67,24 +83,45 @@ jobs:
             exit 1
           fi
       
+      # 7. 测试脚本（保留原有）
       - name: Test Python script
         run: |
-          # 运行Python脚本的帮助信息
           python .github/scripts/generate_pdf.py --help || echo "Script returned error when running --help"
       
+      # 8. 生成PDF（新增字体测试）
       - name: Generate PDF with verbose output
         run: |
           set -x  # 打开调试输出
-          # 运行Python脚本并捕获退出代码
-          python .github/scripts/generate_pdf.py --dir "${{ github.event.inputs.manual_path }}" --output pdf-output --css .github/styles/default.css --author "Z-Series" --verbose || { echo "PDF generation failed with exit code $?"; ls -la pdf-output; exit 1; }
           
-          # 如果成功，显示生成的PDF文件
+          # 新增：测试中文字体渲染
+          echo -e '<html><body><p>中文测试：显示屏(非触控)</p></body></html>' > font-test.html
+          python -m weasyprint font-test.html font-test.pdf
+          ls -la font-test.pdf
+          
+          # 原有生成命令
+          python .github/scripts/generate_pdf.py \
+            --dir "${{ github.event.inputs.manual_path }}" \
+            --output pdf-output \
+            --css .github/styles/default.css \
+            --author "Z-Series" \
+            --verbose || { 
+              echo "PDF generation failed with exit code $?"
+              ls -la pdf-output
+              exit 1
+            }
+          
           echo "Generated PDF files:"
           ls -la pdf-output/
-          
+      
+      # 9. 设置产物名称（优化路径处理）
       - name: Set artifact_name
-        run: echo "ARTIFACT_NAME=pdf-manual-$(echo '${{ github.event.inputs.manual_path }}' | tr '/' '-')" >> $GITHUB_ENV
-
+        run: |
+          # 替换路径中的特殊字符
+          safe_name=$(echo "${{ github.event.inputs.manual_path }}" | tr '/' '-' | tr ' ' '_')
+          echo "ARTIFACT_NAME=pdf-manual-${safe_name}" >> $GITHUB_ENV
+          echo "Generated artifact name: ${ARTIFACT_NAME}"
+      
+      # 10. 上传产物（保留原有）
       - name: Upload PDF as artifact
         uses: actions/upload-artifact@v4
         with:
