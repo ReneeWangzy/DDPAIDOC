@@ -82,11 +82,12 @@ jobs:
           echo "Generated PDF files:"
           ls -la pdf-output/
           
-      - name: Upload PDF as artifact (if exists)
-        if: success()
+      - name: Set artifact_name
+        run: echo "ARTIFACT_NAME=pdf-manual-${{ github.event.inputs.manual_path }}" >> $GITHUB_ENV
+
+      - name: Upload PDF as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pdf-manual-${{ github.event.inputs.manual_path }}
+          name: ${{ env.ARTIFACT_NAME }}
           path: pdf-output/*.pdf
           retention-days: 30
-          if-no-files-found: warn
