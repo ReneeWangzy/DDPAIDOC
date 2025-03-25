@@ -3,150 +3,140 @@ on:
   workflow_dispatch:
     inputs:
       manual_path:
-        description: '指定要生成PDF的手册路径'
+        description: 'PDF生成路径'
         required: true
+        type: string
 
 jobs:
-  build-pdfs:
+  generate-pdf:
     runs-on: ubuntu-22.04
-    
+    env:
+      FONT_CACHE_KEY: ${{ runner.os }}-noto-fonts-v1
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
+
+      - name: Cache Chinese fonts
+        uses: actions/cache@v3
+        id: font-cache
         with:
-          fetch-depth: 0
-      
-      - name: Set up Python
+          path: /usr/share/fonts/truetype/noto
+          key: ${{ env.FONT_CACHE_KEY }}
+
+      - name: Install Chinese fonts (仅缓存未命中时执行)
+        if: steps.font-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends fonts-noto-cjk
+          sudo fc-cache -fv
+          echo "=== 已安装字体 ==="
+          fc-list :lang=zh | grep "Noto Sans CJK SC" || exit 1
+
+      - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-      
-      - name: Install system dependencies (中文字体修复版)
-        run: |
-          # 1. 更新软件源
-          sudo apt-get update -y
-          
-          # 2. 安装基础工具
-          sudo apt-get install -y \
-            wget \
-            unzip \
-            fontconfig \
-            pandoc \
-            texlive-xelatex \
-            texlive-fonts-recommended \
-            python3-pip \
-            python3-venv
-          
-          # 3. 手动安装Noto Sans CJK字体
-          echo "=== 下载安装中文字体 ==="
-          wget -q https://noto-website-2.storage.googleapis.com/pkgs/NotoSansCJKsc-hinted.zip -O /tmp/NotoSansCJK.zip
-          sudo mkdir -p /usr/share/fonts/noto
-          sudo unzip -o /tmp/NotoSansCJK.zip -d /usr/share/fonts/noto/
-          sudo chmod 644 /usr/share/fonts/noto/*.otf
-          sudo fc-cache -fv
-          
-          # 4. 验证字体安装
-          echo "=== 已安装中文字体 ==="
-          fc-list :lang=zh | grep "Noto Sans CJK SC" || {
-            echo "::error::中文字体安装失败"
-            exit 1
-          }
-          
-          # 5. 补充安装其他字体包
-          sudo apt-get install -y fonts-noto fonts-noto-cjk
-      
-      - name: Install Python packages
+
+      - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install \
-            pandoc-latex-environment \
-            weasyprint==58.1 \
-            pygments
-      
+          pip install weasyprint==58.1 pygments
+
+      # =============== 调试和验证部分 ===============
       - name: Debug repository structure
         run: |
           echo "当前工作目录: $(pwd)"
+          echo "------------------------------------"
           ls -la
+          
+          echo "------------------------------------"
           echo "脚本目录内容:"
           ls -la .github/scripts/ || echo ".github/scripts/ 不存在"
+          
+          echo "------------------------------------"
           echo "样式目录内容:"
           ls -la styles/ || echo "styles/ 不存在"
+          
+          echo "------------------------------------"
           echo "目标手册目录内容:"
-          ls -la "${{ github.event.inputs.manual_path }}" || echo "目录 ${{ github.event.inputs.manual_path }} 不存在"
-      
+          if [ -d "${{ github.event.inputs.manual_path }}" ]; then
+            ls -la "${{ github.event.inputs.manual_path }}"
+          else
+            echo "::error::目录 ${{ github.event.inputs.manual_path }} 不存在"
+            exit 1
+          fi
+          echo "------------------------------------"
+
       - name: Create output directory
         run: mkdir -p pdf-output
-      
+
       - name: Verify Python script existence
         run: |
           if [ -f ".github/scripts/generate_pdf.py" ]; then
-            echo "Python脚本存在"
+            echo "Python脚本存在，前20行内容："
+            echo "------------------------------------"
             head -n 20 .github/scripts/generate_pdf.py
+            echo "------------------------------------"
           else
             echo "::error::未找到Python脚本 .github/scripts/generate_pdf.py"
             exit 1
           fi
-      
-      - name: Verify CSS file existence
+
+      - name: Verify CSS file
         run: |
           if [ -f ".github/styles/default.css" ]; then
-            echo "CSS文件存在"
+            echo "CSS文件存在，前10行内容："
+            echo "------------------------------------"
             head -n 10 .github/styles/default.css
+            echo "------------------------------------"
+            
+            # 检查是否包含中文字体定义
+            if ! grep -q "Noto Sans CJK SC" .github/styles/default.css; then
+              echo "::warning::CSS文件中未检测到中文字体定义"
+              echo "建议添加："
+              echo "body { font-family: 'Noto Sans CJK SC', sans-serif; }"
+            fi
           else
             echo "::error::未找到CSS文件 .github/styles/default.css"
             exit 1
           fi
-      
-      - name: Test Python script
+      # =============== 调试结束 ===============
+
+      - name: Generate test PDF
         run: |
-          python .github/scripts/generate_pdf.py --help || {
-            echo "::warning::运行脚本帮助命令失败"
-          }
-      
-      - name: Generate PDF with verbose output
-        run: |
-          set -x
-          
-          # 中文渲染测试
           echo '<!DOCTYPE html>
           <html>
-          <head>
-            <style>
-              body { font-family: "Noto Sans CJK SC", sans-serif; }
-            </style>
+          <head><meta charset="utf-8">
+          <style>
+            @font-face {
+              font-family: "Noto Sans CJK SC";
+              src: local("Noto Sans CJK SC");
+            }
+            body { font-family: "Noto Sans CJK SC", sans-serif; }
+          </style>
           </head>
-          <body>
-            <p>中文测试：产品外观 显示屏(非触控)</p>
-          </body>
-          </html>' > chinese-test.html
+          <body><p>中文测试：产品外观 显示屏(非触控)</p></body>
+          </html>' > test.html
           
-          python -m weasyprint chinese-test.html pdf-output/chinese-test.pdf
-          
-          # 正式生成PDF
+          python -m weasyprint test.html pdf-output/font-test.pdf
+          echo "=== 测试PDF生成结果 ==="
+          ls -lh pdf-output/
+
+      - name: Generate production PDF
+        run: |
           python .github/scripts/generate_pdf.py \
             --dir "${{ github.event.inputs.manual_path }}" \
             --output pdf-output \
             --css .github/styles/default.css \
-            --author "Z-Series" \
             --verbose || {
               echo "::error::PDF生成失败"
-              ls -la pdf-output/
               exit 1
             }
-          
-          echo "生成的PDF文件:"
-          ls -la pdf-output/
-      
-      - name: Set artifact_name
-        run: |
-          # 安全处理路径名称
-          safe_name=$(basename "${{ github.event.inputs.manual_path }}" | tr -cd '[:alnum:]._-' | tr ' ' '_')
-          echo "ARTIFACT_NAME=pdf-manual-${safe_name}" >> $GITHUB_ENV
-          echo "生成产物名称: ${ARTIFACT_NAME}"
-      
-      - name: Upload PDF as artifact
-        uses: actions/upload-artifact@v4
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
         with:
-          name: ${{ env.ARTIFACT_NAME }}
+          name: generated-pdf-${{ github.run_number }}
           path: pdf-output/*.pdf
-          retention-days: 30
+          retention-days: 3
