@@ -1,0 +1,172 @@
+name: Python Script Test
+on:
+  workflow_dispatch:
+  
+jobs:
+  test-script:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install weasyprint
+          sudo apt-get update
+          sudo apt-get install -y pandoc
+      
+      - name: Create test directory structure
+        run: |
+          # Create test directory
+          mkdir -p test-z60
+          
+          # Create README.md with link
+          cat > test-z60/README.md << 'EOF'
+          # 测试手册
+          
+          [测试章节](test-chapter.md)
+          EOF
+          
+          # Create linked file
+          cat > test-z60/test-chapter.md << 'EOF'
+          # 测试章节
+          
+          这是一个测试内容。
+          EOF
+          
+          # Create CSS file
+          mkdir -p styles
+          cat > styles/default.css << 'EOF'
+          body {
+              font-family: "Noto Sans CJK SC", "SimSun", sans-serif;
+              font-size: 11pt;
+              line-height: 1.5;
+          }
+          h1 {
+              color: #1a73e8;
+          }
+          EOF
+      
+      - name: Create simple Python script
+        run: |
+          cat > simple_pdf.py << 'EOF'
+          import os
+          import re
+          import subprocess
+          import tempfile
+          from datetime import datetime
+          
+          def extract_files_from_readme(readme_path):
+              """从README.md文件中提取文件链接"""
+              print(f"Reading README from: {readme_path}")
+              
+              with open(readme_path, 'r', encoding='utf-8') as f:
+                  content = f.read()
+              
+              # 提取标题
+              title_match = re.search(r'^#\s+(.+?)$', content, re.MULTILINE)
+              title = title_match.group(1) if title_match else os.path.basename(os.path.dirname(readme_path))
+              
+              print(f"Extracted title: {title}")
+              
+              # 使用正则表达式提取所有文件链接
+              links = re.findall(r'\[.*?\]\((.*?\.md)\)', content)
+              
+              print(f"Found {len(links)} links: {links}")
+              
+              return title, links
+          
+          def create_title_page(title):
+              """创建封面页"""
+              title_content = f"""# {title}
+          
+          **版本: 1.0**
+          
+          © {datetime.now().year} 测试
+          """
+              
+              # 创建临时文件
+              fd, path = tempfile.mkstemp(suffix='.md')
+              with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                  f.write(title_content)
+              
+              print(f"Created title page at: {path}")
+              return path
+          
+          def process_manual(dir_path, css_file):
+              """处理手册目录"""
+              readme_path = os.path.join(dir_path, 'README.md')
+              
+              # 提取文件列表和标题
+              title, file_list = extract_files_from_readme(readme_path)
+              
+              if not file_list:
+                  print(f"No Markdown links found in {readme_path}")
+                  return False
+              
+              # 将相对路径转换为绝对路径
+              file_list = [os.path.join(dir_path, f) for f in file_list]
+              
+              # 检查每个文件是否存在
+              for file_path in file_list:
+                  if not os.path.exists(file_path):
+                      print(f"Warning: File does not exist: {file_path}")
+              
+              # 创建封面页
+              title_page = create_title_page(title)
+              
+              # 所有处理的文件
+              all_files = [title_page] + file_list
+              
+              # 设置输出PDF路径
+              output_pdf = f"{os.path.basename(dir_path)}.pdf"
+              
+              print(f"Generating PDF: {output_pdf}")
+              print(f"Files to process: {all_files}")
+              
+              # 使用pandoc生成PDF
+              cmd = [
+                  'pandoc',
+                  '-o', output_pdf,
+                  '--pdf-engine=weasyprint'
+              ]
+              
+              if css_file and os.path.exists(css_file):
+                  cmd.extend(['--css', css_file])
+              
+              cmd.extend(all_files)
+              
+              print("Running command:", ' '.join(cmd))
+              
+              # 执行命令
+              result = subprocess.run(cmd, capture_output=True, text=True)
+              
+              # 检查是否有错误
+              if result.returncode != 0:
+                  print(f"Error: {result.stderr}")
+                  return False
+              
+              print(f"PDF generated successfully: {output_pdf}")
+              return True
+          
+          # 执行脚本
+          success = process_manual('test-z60', 'styles/default.css')
+          print(f"Process {'succeeded' if success else 'failed'}")
+          EOF
+      
+      - name: Run simple script
+        run: python simple_pdf.py
+      
+      - name: Upload generated PDF
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-z60-pdf
+          path: test-z60.pdf
