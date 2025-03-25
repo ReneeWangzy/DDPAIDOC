@@ -1,0 +1,92 @@
+name: Try-Catch Script Test
+on:
+  workflow_dispatch:
+  
+jobs:
+  try-catch-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandoc-latex-environment
+          pip install weasyprint
+          sudo apt-get update
+          sudo apt-get install -y pandoc
+      
+      - name: Create test directory
+        run: |
+          mkdir -p test-z60
+          echo "# 测试手册" > test-z60/README.md
+          echo "[测试章节](test-chapter.md)" >> test-z60/README.md
+          echo "# 测试章节" > test-z60/test-chapter.md
+          echo "这是一个测试内容。" >> test-z60/test-chapter.md
+      
+      - name: Create output directory
+        run: mkdir -p pdf-output
+      
+      - name: Create wrapper script
+        run: |
+          cat > wrapper.py << 'EOF'
+          import sys
+          import traceback
+          import subprocess
+          
+          # 原始脚本路径和参数
+          script_path = '.github/scripts/generate_pdf.py'
+          script_args = sys.argv[1:]
+          
+          print(f"Running script: {script_path}")
+          print(f"With arguments: {script_args}")
+          
+          try:
+              # 尝试导入脚本并执行main函数
+              sys.path.append('.github/scripts')
+              module_name = script_path.replace('/', '.').replace('.py', '')
+              exec(f"from {module_name} import main")
+              main()
+          except Exception as e:
+              print(f"Error in script execution: {e}")
+              print("Traceback:")
+              traceback.print_exc()
+              
+              # 尝试直接运行脚本作为进程
+              print("\nTrying to run as subprocess:")
+              cmd = ['python', script_path] + script_args
+              result = subprocess.run(cmd, capture_output=True, text=True)
+              print(f"Exit code: {result.returncode}")
+              print(f"Output:\n{result.stdout}")
+              print(f"Error:\n{result.stderr}")
+              
+              sys.exit(1)
+          EOF
+      
+      - name: Run with wrapper
+        run: |
+          python wrapper.py --dir test-z60 --output pdf-output --css styles/default.css --author "Z-Series" || echo "Script failed but continuing"
+          
+          echo "Output directory content:"
+          ls -la pdf-output/ || echo "No output directory"
+      
+      - name: Upload any generated files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-output
+          path: |
+            pdf-output/
+            test-z60/
+            wrapper.py
+            .github/scripts/generate_pdf.py
+          if-no-files-found: warn
