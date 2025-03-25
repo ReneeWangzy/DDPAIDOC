@@ -36,31 +36,34 @@ jobs:
       - name: Create output directory
         run: mkdir -p pdf-output
       
-      - name: Create modified script
+      - name: Create python wrapper file
         run: |
-          # Copy the original script
-          cp .github/scripts/generate_pdf.py modified_script.py
-          
-          # Add try-except wrapper around the main function call
-          cat >> modified_script.py << 'EOF'
-
-# Add try-except wrapper to the end of the file
-if __name__ == "__main__":
-    try:
-        main()
-    except Exception as e:
-        import traceback
-        print("Error occurred:", str(e))
-        traceback.print_exc()
-        # Continue instead of exiting with error
-        print("Continuing despite error...")
-        exit(0)
-EOF
+          echo '#!/usr/bin/env python3' > error_wrapper.py
+          echo 'import sys' >> error_wrapper.py
+          echo 'import subprocess' >> error_wrapper.py
+          echo '' >> error_wrapper.py
+          echo 'cmd = ["python", ".github/scripts/generate_pdf.py", "--dir", "test-z60", "--output", "pdf-output", "--css", "styles/default.css", "--author", "Z-Series"]' >> error_wrapper.py
+          echo 'print("Running command:", " ".join(cmd))' >> error_wrapper.py
+          echo 'try:' >> error_wrapper.py
+          echo '    result = subprocess.run(cmd, capture_output=True, text=True)' >> error_wrapper.py
+          echo '    print("Exit code:", result.returncode)' >> error_wrapper.py
+          echo '    print("Output:", result.stdout)' >> error_wrapper.py
+          echo '    if result.returncode != 0:' >> error_wrapper.py
+          echo '        print("Error:", result.stderr)' >> error_wrapper.py
+          echo 'except Exception as e:' >> error_wrapper.py
+          echo '    print("Exception:", str(e))' >> error_wrapper.py
+          echo '# Always exit successfully' >> error_wrapper.py
+          echo 'sys.exit(0)' >> error_wrapper.py
       
-      - name: Run modified script
+      - name: Run wrapper
+        run: python error_wrapper.py
+      
+      - name: Try direct run with error catching
         run: |
-          python modified_script.py --dir test-z60 --output pdf-output --css styles/default.css --author "Z-Series"
-          
+          python .github/scripts/generate_pdf.py --dir test-z60 --output pdf-output --css styles/default.css --author "Z-Series" || echo "Script failed but continuing"
+      
+      - name: Check output directory
+        run: |
           echo "Output directory content:"
           ls -la pdf-output/ || echo "No output directory"
       
@@ -68,5 +71,5 @@ EOF
         uses: actions/upload-artifact@v4
         with:
           name: modified-script-output
-          path: pdf-output/*.pdf
+          path: pdf-output/
           if-no-files-found: warn
