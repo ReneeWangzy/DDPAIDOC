@@ -5,12 +5,10 @@ on:
       manual_path:
         description: '指定要生成PDF的手册路径'
         required: true
-  
+
 jobs:
   build-pdfs:
-    runs-on: ubuntu-22.04  # 改用更稳定的 22.04 LTS
-    # 如果必须用 24.04，请取消下一行注释
-    # runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     
     steps:
       - name: Checkout repository
@@ -23,16 +21,16 @@ jobs:
         with:
           python-version: '3.10'
       
-      - name: Install system dependencies (关键修复)
+      - name: Install system dependencies (修复版)
         run: |
-          # 1. 强制更新软件源
+          # 1. 更新软件源
           sudo apt-get update -y
           
-          # 2. 安装基础依赖（兼容新旧Ubuntu版本）
+          # 2. 安装基础依赖（Ubuntu 22.04兼容版本）
           sudo apt-get install -y \
             fonts-noto \                   # 基础字体包
             fonts-noto-cjk \               # 中日韩字体
-            fonts-noto-core \              # 核心字体
+            fonts-noto-extra \             # 替代原来的fonts-noto-core
             pandoc \
             texlive-xelatex \
             texlive-fonts-recommended \
