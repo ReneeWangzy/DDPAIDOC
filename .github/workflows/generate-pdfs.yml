@@ -76,7 +76,7 @@ jobs:
         run: |
           set -x  # 打开调试输出
           # 运行Python脚本并捕获退出代码
-          python .github/scripts/generate_pdf.py --dir "${{ github.event.inputs.manual_path }}" --output pdf-output --css styles/default.css --author "Z-Series" --verbose || { echo "PDF generation failed with exit code $?"; ls -la pdf-output; exit 1; }
+          python .github/scripts/generate_pdf.py --dir "${{ github.event.inputs.manual_path }}" --output pdf-output --css .github/styles/default.css --author "Z-Series" --verbose || { echo "PDF generation failed with exit code $?"; ls -la pdf-output; exit 1; }
           
           # 如果成功，显示生成的PDF文件
           echo "Generated PDF files:"
