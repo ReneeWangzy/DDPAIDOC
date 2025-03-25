@@ -35,48 +35,48 @@ jobs:
           echo "body { font-family: Arial; }" > styles/simple.css
       
       - name: Run Python script directly
-        run: |
-          python -c "
-import os
-import subprocess
+        run: >-
+          python -c '
+          import os
+          import subprocess
 
-# Generate PDF using pandoc
-readme_path = 'test-manual/README.md'
-output_pdf = 'test-output.pdf'
-css_file = 'styles/simple.css'
+          # Generate PDF using pandoc
+          readme_path = "test-manual/README.md"
+          output_pdf = "test-output.pdf"
+          css_file = "styles/simple.css"
 
-# Extract content from README
-with open(readme_path, 'r') as f:
-    readme_content = f.read()
+          # Extract content from README
+          with open(readme_path, "r") as f:
+              readme_content = f.read()
 
-# Extract content from linked file
-with open('test-manual/test-page.md', 'r') as f:
-    page_content = f.read()
+          # Extract content from linked file
+          with open("test-manual/test-page.md", "r") as f:
+              page_content = f.read()
 
-# Create a combined markdown file
-with open('combined.md', 'w') as f:
-    f.write(readme_content + '\n\n' + page_content)
+          # Create a combined markdown file
+          with open("combined.md", "w") as f:
+              f.write(readme_content + "\n\n" + page_content)
 
-# Generate PDF using pandoc
-cmd = [
-    'pandoc',
-    'combined.md',
-    '-o', output_pdf,
-    '--pdf-engine=weasyprint',
-    '--css=' + css_file
-]
+          # Generate PDF using pandoc
+          cmd = [
+              "pandoc",
+              "combined.md",
+              "-o", output_pdf,
+              "--pdf-engine=weasyprint",
+              "--css=" + css_file
+          ]
 
-print('Running command:', ' '.join(cmd))
-result = subprocess.run(cmd, capture_output=True, text=True)
+          print("Running command:", " ".join(cmd))
+          result = subprocess.run(cmd, capture_output=True, text=True)
 
-if result.returncode != 0:
-    print('Error generating PDF:')
-    print(result.stderr)
-    exit(1)
-else:
-    print('PDF generated successfully')
-    print('PDF file size:', os.path.getsize(output_pdf), 'bytes')
-          "
+          if result.returncode != 0:
+              print("Error generating PDF:")
+              print(result.stderr)
+              exit(1)
+          else:
+              print("PDF generated successfully")
+              print("PDF file size:", os.path.getsize(output_pdf), "bytes")
+          '
       
       - name: Upload test PDF
         uses: actions/upload-artifact@v4
