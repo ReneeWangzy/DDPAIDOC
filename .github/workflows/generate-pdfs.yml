@@ -59,9 +59,9 @@ jobs:
       
       - name: Verify CSS file existence
         run: |
-          if [ -f "styles/default.css" ]; then
+          if [ -f ".github/styles/default.css" ]; then
             echo "CSS file exists"
-            head -n 10 styles/default.css
+            head -n 10 .github/styles/default.css
           else
             echo "ERROR: CSS file not found at styles/default.css"
             exit 1
