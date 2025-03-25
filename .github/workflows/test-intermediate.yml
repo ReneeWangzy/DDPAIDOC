@@ -1,0 +1,85 @@
+name: Intermediate PDF Test
+on:
+  workflow_dispatch:
+  
+jobs:
+  test-intermediate:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install weasyprint
+          sudo apt-get update
+          sudo apt-get install -y pandoc
+      
+      - name: Create test files
+        run: |
+          mkdir -p test-manual
+          echo "# Test Manual" > test-manual/README.md
+          echo "[Test Page](test-page.md)" >> test-manual/README.md
+          
+          echo "# Test Page" > test-manual/test-page.md
+          echo "This is a test page." >> test-manual/test-page.md
+          
+          mkdir -p styles
+          echo "body { font-family: Arial; }" > styles/simple.css
+      
+      - name: Run Python script directly
+        run: |
+          python -c "
+import os
+import subprocess
+
+# Generate PDF using pandoc
+readme_path = 'test-manual/README.md'
+output_pdf = 'test-output.pdf'
+css_file = 'styles/simple.css'
+
+# Extract content from README
+with open(readme_path, 'r') as f:
+    readme_content = f.read()
+
+# Extract content from linked file
+with open('test-manual/test-page.md', 'r') as f:
+    page_content = f.read()
+
+# Create a combined markdown file
+with open('combined.md', 'w') as f:
+    f.write(readme_content + '\n\n' + page_content)
+
+# Generate PDF using pandoc
+cmd = [
+    'pandoc',
+    'combined.md',
+    '-o', output_pdf,
+    '--pdf-engine=weasyprint',
+    '--css=' + css_file
+]
+
+print('Running command:', ' '.join(cmd))
+result = subprocess.run(cmd, capture_output=True, text=True)
+
+if result.returncode != 0:
+    print('Error generating PDF:')
+    print(result.stderr)
+    exit(1)
+else:
+    print('PDF generated successfully')
+    print('PDF file size:', os.path.getsize(output_pdf), 'bytes')
+          "
+      
+      - name: Upload test PDF
+        uses: actions/upload-artifact@v4
+        with:
+          name: intermediate-test
+          path: test-output.pdf
