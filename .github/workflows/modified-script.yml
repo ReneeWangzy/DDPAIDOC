@@ -42,19 +42,20 @@ jobs:
           cp .github/scripts/generate_pdf.py modified_script.py
           
           # Add try-except wrapper around the main function call
-          echo '
+          cat >> modified_script.py << 'EOF'
+
 # Add try-except wrapper to the end of the file
 if __name__ == "__main__":
     try:
         main()
     except Exception as e:
         import traceback
-        print(f"Error: {e}")
+        print("Error occurred:", str(e))
         traceback.print_exc()
         # Continue instead of exiting with error
         print("Continuing despite error...")
         exit(0)
-          ' >> modified_script.py
+EOF
       
       - name: Run modified script
         run: |
