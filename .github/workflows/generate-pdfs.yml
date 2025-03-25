@@ -83,7 +83,7 @@ jobs:
           ls -la pdf-output/
           
       - name: Set artifact_name
-        run: echo "ARTIFACT_NAME=pdf-manual-${{ github.event.inputs.manual_path }}" >> $GITHUB_ENV
+        run: echo "ARTIFACT_NAME=pdf-manual-$(echo '${{ github.event.inputs.manual_path }}' | tr '/' '-')" >> $GITHUB_ENV
 
       - name: Upload PDF as artifact
         uses: actions/upload-artifact@v4
