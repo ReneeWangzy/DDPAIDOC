@@ -1,11 +1,12 @@
 name: Generate PDF Manuals
+
 on:
   workflow_dispatch:
     inputs:
       manual_path:
         description: '指定要生成PDF的手册路径'
         required: true
-  
+
 jobs:
   build-pdfs:
     runs-on: ubuntu-latest
@@ -23,15 +24,25 @@ jobs:
       
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install pandoc-latex-environment
-          pip install weasyprint
+          # 安装系统依赖（关键修改：添加中文字体和渲染库）
           sudo apt-get update
-          sudo apt-get install -y pandoc
-          # 确认安装成功
-          echo "Installed packages:"
-          pip list
+          sudo apt-get install -y \
+            pandoc \
+            libpango-1.0-0 \
+            libharfbuzz-dev \
+            fonts-noto-cjk
+          
+          # 安装Python包
+          python -m pip install --upgrade pip
+          pip install \
+            weasyprint==60.1 \
+            pandoc-latex-environment
+          
+          # 验证字体安装
+          echo "已安装中文字体："
+          fc-list :lang=zh | grep Noto
       
+      # 保留您原有的调试步骤
       - name: Debug repository structure
         run: |
           echo "Current working directory: $(pwd)"
@@ -47,47 +58,31 @@ jobs:
       - name: Create output directory
         run: mkdir -p pdf-output
       
-      - name: Verify Python script existence
+      - name: Verify files
         run: |
-          if [ -f ".github/scripts/generate_pdf.py" ]; then
-            echo "Python script exists"
-            head -n 20 .github/scripts/generate_pdf.py
-          else
-            echo "ERROR: Python script not found at .github/scripts/generate_pdf.py"
-            exit 1
-          fi
+          [ -f ".github/scripts/generate_pdf.py" ] || { echo "ERROR: Missing generate_pdf.py"; exit 1; }
+          [ -f ".github/styles/default.css" ] || { echo "ERROR: Missing default.css"; exit 1; }
       
-      - name: Verify CSS file existence
+      - name: Generate PDF
+        env:
+          # 关键环境变量（确保找到库和字体）
+          FONTCONFIG_PATH: /etc/fonts
+          DYLD_FALLBACK_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/
         run: |
-          if [ -f ".github/styles/default.css" ]; then
-            echo "CSS file exists"
-            head -n 10 .github/styles/default.css
-          else
-            echo "ERROR: CSS file not found at styles/default.css"
-            exit 1
-          fi
-      
-      - name: Test Python script
-        run: |
-          # 运行Python脚本的帮助信息
-          python .github/scripts/generate_pdf.py --help || echo "Script returned error when running --help"
-      
-      - name: Generate PDF with verbose output
-        run: |
-          set -x  # 打开调试输出
-          # 运行Python脚本并捕获退出代码
-          python .github/scripts/generate_pdf.py --dir "${{ github.event.inputs.manual_path }}" --output pdf-output --css .github/styles/default.css --author "Z-Series" --verbose || { echo "PDF generation failed with exit code $?"; ls -la pdf-output; exit 1; }
+          set -x
+          python .github/scripts/generate_pdf.py \
+            --dir "${{ github.event.inputs.manual_path }}" \
+            --output pdf-output \
+            --css .github/styles/default.css \
+            --author "Z-Series" \
+            --verbose || exit 1
           
-          # 如果成功，显示生成的PDF文件
-          echo "Generated PDF files:"
-          ls -la pdf-output/
-          
-      - name: Set artifact_name
-        run: echo "ARTIFACT_NAME=pdf-manual-$(echo '${{ github.event.inputs.manual_path }}' | tr '/' '-')" >> $GITHUB_ENV
-
-      - name: Upload PDF as artifact
+          echo "生成结果："
+          ls -lh pdf-output/
+      
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.ARTIFACT_NAME }}
+          name: pdf-manual-${{ github.event.inputs.manual_path | tr '/' '-' }}
           path: pdf-output/*.pdf
           retention-days: 30
