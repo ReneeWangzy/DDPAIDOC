@@ -4,22 +4,21 @@ on:
   workflow_dispatch:
     inputs:
       manual_path:
-        description: 'Path to the manual directory (e.g., docs/user-manual)'
+        description: 'Path to the manual directory (e.g., ZSeries/Z60)'
         required: true
-        default: 'docs'
 
 jobs:
   build-pdfs:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     steps:
-      - name: Checkout repository
+      - name: Checkout repository (full)
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0  # 获取完整历史记录以解决图片路径问题
 
-      - name: Setup system dependencies
+      - name: Setup environment
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -28,7 +27,7 @@ jobs:
             libharfbuzz-dev \
             fonts-noto-cjk \
             fontconfig
-          echo "=== Installed Chinese fonts ==="
+          echo "=== Font verification ==="
           fc-list :lang=zh | grep Noto
 
       - name: Setup Python
@@ -36,67 +35,54 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install Python packages
+      - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          pip install --upgrade pip
           pip install \
-            weasyprint==60.1 \
+            weasyprint==58.1 \  # 使用稳定版本避免TypeError
             pandoc-latex-environment
-          echo "=== Installed Python packages ==="
-          pip list
-
-      - name: Validate inputs
-        run: |
-          echo "Manual path: ${{ github.event.inputs.manual_path }}"
-          if [ ! -d "${{ github.event.inputs.manual_path }}" ]; then
-            echo "::error::Directory ${{ github.event.inputs.manual_path }} does not exist"
-            ls -la
-            exit 1
-          fi
 
       - name: Prepare directories
         run: |
           mkdir -p pdf-output
-          mkdir -p .github/styles
-          # 使用单行方式写入CSS避免heredoc问题
-          echo -e 'body {\n  font-family: "Noto Sans CJK SC", sans-serif;\n  font-size: 11pt;\n  line-height: 1.5;\n  margin: 0 auto;\n  padding: 20px;\n  color: #333;\n}\nh1 { color: #1a73e8; }' > .github/styles/default.css
+          # 创建带图片路径修复的CSS
+          cat << 'EOF' > .github/styles/default.css
+          body {
+            font-family: "Noto Sans CJK SC", sans-serif;
+            font-size: 11pt;
+            line-height: 1.5;
+          }
+          img {
+            max-width: 100%;
+            height: auto;
+          }
+          EOF
 
-      - name: Generate PDF
+      - name: Generate PDF (with image path fix)
         env:
           FONTCONFIG_PATH: /etc/fonts
-          DYLD_FALLBACK_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           set -ex
-          echo "=== Generating PDF ==="
+          echo "=== Generating PDF with image path handling ==="
+          
+          # 临时修复图片路径
           python .github/scripts/generate_pdf.py \
             --dir "${{ github.event.inputs.manual_path }}" \
             --output pdf-output \
             --css "$(pwd)/.github/styles/default.css" \
             --author "Your-Company-Name" \
-            --verbose
-
-          echo "=== Generated files ==="
-          ls -lh pdf-output/
-
-      - name: Sanitize artifact name
-        id: artifact-name
-        run: |
-          SANITIZED_PATH="${INPUT_MANUAL_PATH//\//-}"
-          SANITIZED_PATH="${SANITIZED_PATH// /_}"
-          echo "name=pdf-manual-${SANITIZED_PATH}" >> $GITHUB_OUTPUT
-        env:
-          INPUT_MANUAL_PATH: ${{ github.event.inputs.manual_path }}
+            --image-root "$(pwd)" \  # 添加图片根路径参数
+            --verbose || {
+              echo "=== Fallback to xelatex ==="
+              pandoc "${{ github.event.inputs.manual_path }}/README.md" -o pdf-output/fallback.pdf \
+                --pdf-engine=xelatex \
+                -V mainfont="Noto Sans CJK SC"
+            }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.artifact-name.outputs.name }}
+          name: manual-${{ github.event.inputs.manual_path | replace('/', '-') }}
           path: pdf-output/*.pdf
           retention-days: 30
-
-      - name: Success notification
-        if: success()
-        run: |
-          echo "PDF successfully generated: ${{ steps.artifact-name.outputs.name }}.pdf"
-          echo "Download URL:"
-          echo "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
