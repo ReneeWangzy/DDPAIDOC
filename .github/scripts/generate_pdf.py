@@ -74,8 +74,12 @@ date: {datetime.now().strftime('%Y年%m月%d日')}
             f.write(f"# {title}\n\n")
         return path
 
-def fix_image_paths(file_list):
-    """创建临时文件，修复图片路径"""
+def fix_image_paths(file_list, repo_root=None):
+    """创建临时文件，修复图片路径
+    Args:
+        file_list: 待处理的文件列表
+        repo_root: 仓库根目录绝对路径（GitHub Actions环境下需要）
+    """
     temp_files = []
     
     try:
@@ -87,24 +91,39 @@ def fix_image_paths(file_list):
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
             
-            # 获取文件所在目录
-            file_dir = os.path.dirname(file_path)
+            # 获取文件所在目录（兼容相对路径和绝对路径）
+            file_dir = os.path.dirname(os.path.abspath(file_path))
             
-            # 修复图片路径 ![alt](path) -> ![alt](file_dir/path)
+            # 修复图片路径 ![alt](path) -> ![alt](absolute_path)
             def replace_path(match):
                 alt_text = match.group(1)
                 img_path = match.group(2)
                 
-                # 如果路径不是http开头且不是绝对路径
-                if not img_path.startswith(('http://', 'https://')) and not os.path.isabs(img_path):
-                    full_img_path = os.path.normpath(os.path.join(file_dir, img_path))
-                    if os.path.exists(full_img_path):
-                        return f'![{alt_text}]({full_img_path})'
+                # 跳过网络图片
+                if img_path.startswith(('http://', 'https://')):
+                    return match.group(0)
                 
-                return match.group(0)  # 保持原样
+                # 处理绝对路径（在GitHub Actions中需要基于仓库根目录）
+                if os.path.isabs(img_path) and repo_root:
+                    abs_path = os.path.join(repo_root, img_path.lstrip('/'))
+                else:
+                    abs_path = os.path.normpath(os.path.join(file_dir, img_path))
+                
+                # 验证路径是否存在（尝试多种可能位置）
+                possible_paths = [
+                    abs_path,
+                    os.path.join(repo_root, img_path) if repo_root else None,
+                    os.path.join(file_dir, img_path)
+                ]
+                
+                for test_path in filter(None, possible_paths):
+                    if os.path.exists(test_path):
+                        return f'![{alt_text}]({test_path})'
+                
+                print(f"警告: 图片不存在 {img_path}，尝试的路径: {possible_paths}")
+                return match.group(0)
             
-            pattern = r'!\[(.*?)\]\((.*?)\)'
-            fixed_content = re.sub(pattern, replace_path, content)
+            fixed_content = re.sub(r'!\[(.*?)\]\((.*?)\)', replace_path, content)
             
             # 创建临时文件
             fd, temp_path = tempfile.mkstemp(suffix='.md')
@@ -116,15 +135,12 @@ def fix_image_paths(file_list):
         return temp_files
     except Exception as e:
         print(f"修复图片路径时出错: {str(e)}")
-        import traceback
         traceback.print_exc()
-        # 清理已创建的临时文件
         for temp_file in temp_files:
-            try:
-                os.remove(temp_file)
-            except:
-                pass
+            try: os.remove(temp_file)
+            except: pass
         return []
+
 
 def generate_pdf_with_pandoc(file_list, output_pdf, title, css_file=None, author=""):
     """使用Pandoc生成PDF"""
