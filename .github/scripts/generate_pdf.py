@@ -258,6 +258,17 @@ def process_single_manual(readme_path, css_file, output_dir=None, author="", ver
         
         # 创建封面页
         title_page = create_title_page(title, version, author)
+
+        print("=== 调试：将合并的文件清单 ===")
+        for i, f in enumerate([title_page] + file_list, 1):
+            file_status = "存在" if os.path.exists(f) else "不存在"
+            print(f"{i}. {f} ({file_status})")
+            if os.path.exists(f):
+                try:
+                    with open(f, 'r', encoding='utf-8') as content_file:
+                        print(f"   前3行内容: {content_file.readlines()[:3]}")
+                except Exception as e:
+                    print(f"   读取失败: {str(e)}")
         
         # 所有处理的文件
         all_files = [title_page] + file_list
