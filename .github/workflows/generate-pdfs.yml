@@ -58,21 +58,8 @@ jobs:
         run: |
           mkdir -p pdf-output
           mkdir -p .github/styles
-          # Fallback CSS if not exists
-          if [ ! -f ".github/styles/default.css" ]; then
-            echo "Generating default CSS..."
-            cat << 'EOF' > .github/styles/default.css
-            body {
-              font-family: "Noto Sans CJK SC", sans-serif;
-              font-size: 11pt;
-              line-height: 1.5;
-              margin: 0 auto;
-              padding: 20px;
-              color: #333;
-            }
-            h1 { color: #1a73e8; }
-            EOF
-          fi
+          # 使用单行方式写入CSS避免heredoc问题
+          echo -e 'body {\n  font-family: "Noto Sans CJK SC", sans-serif;\n  font-size: 11pt;\n  line-height: 1.5;\n  margin: 0 auto;\n  padding: 20px;\n  color: #333;\n}\nh1 { color: #1a73e8; }' > .github/styles/default.css
 
       - name: Generate PDF
         env:
