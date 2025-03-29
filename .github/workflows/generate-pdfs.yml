@@ -8,6 +8,8 @@ on:
         required: true
         default: 'ZSeries/Z60'
 
+
+
 jobs:
   build-pdfs:
     runs-on: ubuntu-latest
@@ -44,6 +46,30 @@ jobs:
             pandoc-latex-environment
           echo "=== Installed packages ==="
           pip list
+
+      - name: Debug file collection
+        run: |
+          echo "=== 手动路径 ==="
+          echo "${{ github.event.inputs.manual_path }}"
+          
+          echo "=== 仓库目录结构 ==="
+          tree -L 3 "${{ github.event.inputs.manual_path }}"
+          
+          echo "=== README.md 内容 ==="
+          cat "${{ github.event.inputs.manual_path }}/README.md"
+          
+          echo "=== 测试文件收集 ==="
+          python -c "
+          import os, re
+          readme_path = os.path.join('${{ github.event.inputs.manual_path }}', 'README.md')
+          with open(readme_path, 'r', encoding='utf-8') as f:
+              content = f.read()
+          links = re.findall(r'\[.*?\]\((.*?\.md)\)', content)
+          print(f'找到 {len(links)} 个链接: {links}')
+          for link in links:
+              abs_path = os.path.join(os.path.dirname(readme_path), link)
+              print(f'{abs_path} -> {os.path.exists(abs_path)}')
+          "
 
       - name: Prepare directories
         run: |
