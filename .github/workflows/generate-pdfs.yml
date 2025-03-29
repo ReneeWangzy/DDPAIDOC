@@ -4,85 +4,112 @@ on:
   workflow_dispatch:
     inputs:
       manual_path:
-        description: '指定要生成PDF的手册路径'
+        description: 'Path to the manual directory (e.g., docs/user-manual)'
         required: true
+        default: 'docs'
 
 jobs:
   build-pdfs:
     runs-on: ubuntu-latest
-    
+    timeout-minutes: 15
+
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-      
-      - name: Install dependencies
+
+      - name: Setup system dependencies
         run: |
-          # 安装系统依赖（关键修改：添加中文字体和渲染库）
           sudo apt-get update
           sudo apt-get install -y \
             pandoc \
             libpango-1.0-0 \
             libharfbuzz-dev \
-            fonts-noto-cjk
-          
-          # 安装Python包
+            fonts-noto-cjk \
+            fontconfig
+          echo "=== Installed Chinese fonts ==="
+          fc-list :lang=zh | grep Noto
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Python packages
+        run: |
           python -m pip install --upgrade pip
           pip install \
             weasyprint==60.1 \
             pandoc-latex-environment
-          
-          # 验证字体安装
-          echo "已安装中文字体："
-          fc-list :lang=zh | grep Noto
-      
-      # 保留您原有的调试步骤
-      - name: Debug repository structure
+          echo "=== Installed Python packages ==="
+          pip list
+
+      - name: Validate inputs
         run: |
-          echo "Current working directory: $(pwd)"
-          echo "Repository content:"
-          ls -la
-          echo "Scripts directory:"
-          ls -la .github/scripts/ || echo ".github/scripts/ not found"
-          echo "Styles directory:"
-          ls -la styles/ || echo "styles/ not found"
-          echo "Target manual directory:"
-          ls -la "${{ github.event.inputs.manual_path }}" || echo "Directory ${{ github.event.inputs.manual_path }} not found"
-      
-      - name: Create output directory
-        run: mkdir -p pdf-output
-      
-      - name: Verify files
+          echo "Manual path: ${{ github.event.inputs.manual_path }}"
+          if [ ! -d "${{ github.event.inputs.manual_path }}" ]; then
+            echo "::error::Directory ${{ github.event.inputs.manual_path }} does not exist"
+            ls -la
+            exit 1
+          fi
+
+      - name: Prepare directories
         run: |
-          [ -f ".github/scripts/generate_pdf.py" ] || { echo "ERROR: Missing generate_pdf.py"; exit 1; }
-          [ -f ".github/styles/default.css" ] || { echo "ERROR: Missing default.css"; exit 1; }
-      
+          mkdir -p pdf-output
+          mkdir -p .github/styles
+          # Fallback CSS if not exists
+          if [ ! -f ".github/styles/default.css" ]; then
+            echo "Generating default CSS..."
+            cat << 'EOF' > .github/styles/default.css
+            body {
+              font-family: "Noto Sans CJK SC", sans-serif;
+              font-size: 11pt;
+              line-height: 1.5;
+              margin: 0 auto;
+              padding: 20px;
+              color: #333;
+            }
+            h1 { color: #1a73e8; }
+            EOF
+          fi
+
       - name: Generate PDF
         env:
-          # 关键环境变量（确保找到库和字体）
           FONTCONFIG_PATH: /etc/fonts
           DYLD_FALLBACK_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/
         run: |
-          set -x
+          set -ex
+          echo "=== Generating PDF ==="
           python .github/scripts/generate_pdf.py \
             --dir "${{ github.event.inputs.manual_path }}" \
             --output pdf-output \
-            --css .github/styles/default.css \
-            --author "Z-Series" \
-            --verbose || exit 1
-          
-          echo "生成结果："
+            --css "$(pwd)/.github/styles/default.css" \
+            --author "Your-Company-Name" \
+            --verbose
+
+          echo "=== Generated files ==="
           ls -lh pdf-output/
-      
+
+      - name: Sanitize artifact name
+        id: artifact-name
+        run: |
+          SANITIZED_PATH="${INPUT_MANUAL_PATH//\//-}"
+          SANITIZED_PATH="${SANITIZED_PATH// /_}"
+          echo "name=pdf-manual-${SANITIZED_PATH}" >> $GITHUB_OUTPUT
+        env:
+          INPUT_MANUAL_PATH: ${{ github.event.inputs.manual_path }}
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pdf-manual-${{ github.event.inputs.manual_path | tr '/' '-' }}
+          name: ${{ steps.artifact-name.outputs.name }}
           path: pdf-output/*.pdf
           retention-days: 30
+
+      - name: Success notification
+        if: success()
+        run: |
+          echo "PDF successfully generated: ${{ steps.artifact-name.outputs.name }}.pdf"
+          echo "Download URL:"
+          echo "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
