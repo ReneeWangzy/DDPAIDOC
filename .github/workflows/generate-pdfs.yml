@@ -6,6 +6,7 @@ on:
       manual_path:
         description: 'Path to the manual directory (e.g., ZSeries/Z60)'
         required: true
+        default: 'ZSeries/Z60'
 
 jobs:
   build-pdfs:
@@ -16,7 +17,7 @@ jobs:
       - name: Checkout repository (full)
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # 获取完整历史记录以解决图片路径问题
+          fetch-depth: 0
 
       - name: Setup environment
         run: |
@@ -27,7 +28,7 @@ jobs:
             libharfbuzz-dev \
             fonts-noto-cjk \
             fontconfig
-          echo "=== Font verification ==="
+          echo "=== Installed Chinese fonts ==="
           fc-list :lang=zh | grep Noto
 
       - name: Setup Python
@@ -37,52 +38,64 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install --upgrade pip
+          python -m pip install --upgrade pip
           pip install \
-            weasyprint==58.1 \  # 使用稳定版本避免TypeError
+            weasyprint==58.1 \
             pandoc-latex-environment
+          echo "=== Installed packages ==="
+          pip list
 
       - name: Prepare directories
         run: |
           mkdir -p pdf-output
-          # 创建带图片路径修复的CSS
-          cat << 'EOF' > .github/styles/default.css
-          body {
-            font-family: "Noto Sans CJK SC", sans-serif;
-            font-size: 11pt;
-            line-height: 1.5;
-          }
-          img {
-            max-width: 100%;
-            height: auto;
-          }
-          EOF
+          echo -e 'body {\n  font-family: "Noto Sans CJK SC", sans-serif;\n  font-size: 11pt;\n  line-height: 1.5;\n}\nimg {\n  max-width: 100%;\n  height: auto;\n}' > .github/styles/default.css
 
-      - name: Generate PDF (with image path fix)
+      - name: Generate PDF
+        id: generate
         env:
           FONTCONFIG_PATH: /etc/fonts
           PYTHONPATH: ${{ github.workspace }}
         run: |
           set -ex
-          echo "=== Generating PDF with image path handling ==="
+          echo "=== Generating PDF ==="
           
-          # 临时修复图片路径
-          python .github/scripts/generate_pdf.py \
+          # First try with WeasyPrint
+          if python .github/scripts/generate_pdf.py \
             --dir "${{ github.event.inputs.manual_path }}" \
             --output pdf-output \
             --css "$(pwd)/.github/styles/default.css" \
+            --root "$(pwd)" \
             --author "Your-Company-Name" \
-            --image-root "$(pwd)" \  # 添加图片根路径参数
-            --verbose || {
-              echo "=== Fallback to xelatex ==="
-              pandoc "${{ github.event.inputs.manual_path }}/README.md" -o pdf-output/fallback.pdf \
-                --pdf-engine=xelatex \
-                -V mainfont="Noto Sans CJK SC"
-            }
+            --verbose; then
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            # Fallback to xelatex
+            echo "=== Fallback to xelatex ==="
+            sudo apt-get install -y texlive-xetex texlive-fonts-recommended
+            pandoc "${{ github.event.inputs.manual_path }}/README.md" -o pdf-output/manual.pdf \
+              --pdf-engine=xelatex \
+              -V mainfont="Noto Sans CJK SC" \
+              -V geometry:margin=25mm
+            echo "status=fallback" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Sanitize artifact name
+        id: sanitize-name
+        run: |
+          SANITIZED_NAME="manual-$(echo '${{ github.event.inputs.manual_path }}' | tr '/' '-')"
+          echo "name=$SANITIZED_NAME" >> $GITHUB_OUTPUT
+          echo "Generated artifact name: $SANITIZED_NAME"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: manual-${{ replace(github.event.inputs.manual_path, '/', '-') }}
+          name: ${{ steps.sanitize-name.outputs.name }}
           path: pdf-output/*.pdf
           retention-days: 30
+
+      - name: Report status
+        run: |
+          echo "PDF generation ${{ steps.generate.outputs.status }}"
+          if [ "${{ steps.generate.outputs.status }}" == "fallback" ]; then
+            echo "::notice::Used xelatex fallback method"
+          fi
