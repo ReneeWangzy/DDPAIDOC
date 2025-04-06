@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-增强版PDF生成器 - 专为GitHub Actions设计
+修复版PDF生成器 - 解决正则表达式错误
 """
 
 import os
 import re
 import sys
 import argparse
+import subprocess
 from pathlib import Path
 
 def parse_args():
@@ -22,20 +23,20 @@ def parse_args():
     return parser.parse_args()
 
 def find_all_markdown_files(readme_path, root_dir):
-    """递归查找所有关联的Markdown文件"""
+    """递归查找所有关联的Markdown文件（修复正则表达式）"""
     with open(readme_path, 'r', encoding='utf-8') as f:
         content = f.read()
 
+    # 修正后的正则表达式（添加了缺少的括号）
     # 匹配两种格式：
     # 1. [text](path.md)
     # 2. ➢ 1-directory
-    pattern = r'(?:\[.*?\]\((.*?\.md)\)|➢\s*(\d+-[\w\-]+)'
-    matches = re.finditer(pattern, content)
+    pattern = r'(?:\[.*?\]\((.*?\.md)\)|➢\s*(\d+[\w\-]+))'
     
     files = {os.path.normpath(readme_path)}
     readme_dir = os.path.dirname(readme_path)
 
-    for match in matches:
+    for match in re.finditer(pattern, content):
         # 处理[text](path.md)格式
         if match.group(1):
             abs_path = os.path.normpath(os.path.join(readme_dir, match.group(1)))
@@ -86,27 +87,32 @@ def main():
         print(f"仓库根目录: {args.root}")
         print(f"README路径: {args.readme}")
 
-    # 查找所有Markdown文件
-    md_files = find_all_markdown_files(args.readme, args.root)
-    
-    if args.verbose:
-        print("将合并的文件:")
-        for f in md_files:
-            print(f" - {f}")
+    try:
+        # 查找所有Markdown文件
+        md_files = find_all_markdown_files(args.readme, args.root)
+        
+        if args.verbose:
+            print("将合并的文件:")
+            for f in md_files:
+                print(f" - {f}")
 
-    # 确保输出目录存在
-    os.makedirs(os.path.dirname(args.output), exist_ok=True)
+        # 确保输出目录存在
+        os.makedirs(os.path.dirname(args.output), exist_ok=True)
 
-    # 生成PDF
-    success = generate_pdf(
-        md_files,
-        args.output,
-        args.css,
-        args.title,
-        args.author
-    )
+        # 生成PDF
+        success = generate_pdf(
+            md_files,
+            args.output,
+            args.css,
+            args.title,
+            args.author
+        )
 
-    if not success:
+        if not success:
+            sys.exit(1)
+
+    except Exception as e:
+        print(f"处理过程中发生错误: {str(e)}", file=sys.stderr)
         sys.exit(1)
 
 if __name__ == '__main__':
