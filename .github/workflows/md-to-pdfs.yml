@@ -1,0 +1,156 @@
+name: Markdown to Generate PDF Manuals
+
+on:
+  workflow_dispatch:
+    inputs:
+      manual_path:
+        description: 'Path to the manual directory (e.g., ZSeries/Z60)'
+        required: true
+        default: 'ZSeries/Z60'
+
+jobs:
+  build-pdfs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository (full)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pandoc \
+            libpango-1.0-0 \
+            libharfbuzz-dev \
+            fonts-noto-cjk \
+            fonts-wqy-zenhei \
+            fontconfig
+          echo "=== 已安装中文字体 ==="
+          fc-list :lang=zh | grep -E "Noto|WenQuanYi"
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install \
+            weasyprint==58.1 \
+            pypandoc==1.11
+          echo "=== 已安装Python包 ==="
+          pip list
+
+      - name: Verify directory structure
+        run: |
+          echo "=== 手册路径内容 ==="
+          ls -la "${{ github.event.inputs.manual_path }}"
+          echo "=== README.md 内容预览 ==="
+          head -n 20 "${{ github.event.inputs.manual_path }}/README.md"
+
+      - name: Prepare assets
+        run: |
+          mkdir -p pdf-output
+          # 创建增强版CSS样式
+          cat << 'EOF' > .github/styles/manual.css
+          body {
+              font-family: "Noto Sans CJK SC", "WenQuanYi Zen Hei", sans-serif;
+              font-size: 11pt;
+              line-height: 1.6;
+              color: #333;
+          }
+          h1, h2, h3 {
+              color: #2c3e50;
+              border-bottom: 1px solid #eee;
+              padding-bottom: 0.3em;
+          }
+          code {
+              font-family: "Courier New", monospace;
+              background-color: #f5f5f5;
+              padding: 0.2em 0.4em;
+              border-radius: 3px;
+          }
+          img {
+              max-width: 100%;
+              height: auto;
+              display: block;
+              margin: 0 auto;
+          }
+          table {
+              border-collapse: collapse;
+              width: 100%;
+          }
+          th, td {
+              border: 1px solid #ddd;
+              padding: 8px;
+          }
+          th {
+              background-color: #f2f2f2;
+          }
+          EOF
+
+      - name: Generate PDF (Enhanced)
+        id: generate
+        env:
+          FONTCONFIG_PATH: /etc/fonts
+        run: |
+          set -ex
+          echo "=== 开始生成PDF ==="
+          
+          # 使用增强版Python脚本
+          python .github/scripts/pdf_generator.py \
+            --root "$(pwd)" \
+            --readme "${{ github.event.inputs.manual_path }}/README.md" \
+            --output pdf-output/manual.pdf \
+            --css "$(pwd)/.github/styles/manual.css" \
+            --title "产品文档" \
+            --author "Your-Company-Name" \
+            --verbose
+
+          echo "status=success" >> $GITHUB_OUTPUT
+
+      - name: Fallback to xelatex if failed
+        if: steps.generate.outcome == 'failure'
+        run: |
+          echo "=== 使用xelatex备用方案 ==="
+          sudo apt-get install -y texlive-xetex texlive-fonts-recommended
+          
+          # 收集所有Markdown文件
+          find "${{ github.event.inputs.manual_path }}" -name "*.md" -print0 | sort -z | xargs -0 pandoc \
+            -o pdf-output/manual.pdf \
+            --pdf-engine=xelatex \
+            -V mainfont="Noto Sans CJK SC" \
+            -V geometry:margin=25mm \
+            --toc \
+            --toc-depth=3
+          
+          echo "status=fallback" >> $GITHUB_OUTPUT
+
+      - name: Sanitize artifact name
+        id: sanitize-name
+        run: |
+          SANITIZED_NAME="manual-$(echo '${{ github.event.inputs.manual_path }}' | tr '/' '-' | tr '[:upper:]' '[:lower:]')"
+          echo "name=$SANITIZED_NAME" >> $GITHUB_OUTPUT
+          echo "生成的产物名称: $SANITIZED_NAME"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.sanitize-name.outputs.name }}
+          path: pdf-output/*.pdf
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Report generation status
+        run: |
+          if [ "${{ steps.generate.outputs.status }}" == "fallback" ]; then
+            echo "::warning::使用了xelatex备用方案生成PDF"
+          else
+            echo "::notice::PDF生成成功 (使用WeasyPrint)"
+          fi
+          echo "PDF路径: pdf-output/manual.pdf"
