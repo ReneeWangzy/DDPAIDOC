@@ -103,7 +103,7 @@ jobs:
           echo "=== 开始生成PDF ==="
           
           # 使用增强版Python脚本
-          python .github/scripts/pdf_generator.py \
+          python .github/scripts/md_to_pdf.py \
             --root "$(pwd)" \
             --readme "${{ github.event.inputs.manual_path }}/README.md" \
             --output pdf-output/manual.pdf \
